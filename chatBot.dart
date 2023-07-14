@@ -1,395 +1,260 @@
-import 'dart:convert';
+import 'dart:io';
 
-import 'package:bubble/bubble.dart';
-import "package:flutter/material.dart";
-import 'package:chat_bubbles/chat_bubbles.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import "package:cloud_firestore/cloud_firestore.dart" as cloud_store;
 
-import 'package:http/http.dart' as http;
-import 'package:shimmer/shimmer.dart';
+import 'package:image_picker/image_picker.dart';
 
-class ChatBotScreen extends StatefulWidget {
-  const ChatBotScreen({Key? key}) : super(key: key);
+import 'package:my_tips/models/user.dart';
+import 'package:my_tips/selectingPhoto/selectingMultiple.dart' as mp;
+import 'package:my_tips/services/Database.dart';
+import 'package:provider/provider.dart';
+
+final imageHelper1 = mp.ImageHelper();
+
+class ProfileImage extends StatefulWidget {
+  const ProfileImage({
+    Key? key,
+  }) : super(key: key);
 
   @override
-  State<ChatBotScreen> createState() => _ChatBotScreen();
+  State<ProfileImage> createState() => _ProfileImageState();
 }
 
-class _ChatBotScreen extends State<ChatBotScreen>
-    with SingleTickerProviderStateMixin {
-  final GlobalKey<AnimatedListState> _listkey = GlobalKey();
-  final List<dynamic> _data = [];
-  static const String BOT_URL = 'http://172.20.10.2:5000/api/predict';
-  TextEditingController queryController = TextEditingController();
-  Map<String, bool> loadingMap = {};
-  late AnimationController _animationController;
-  late Animation<Alignment> _alignmentAnimation;
-  bool _isExpanded = false;
-  final ScrollController _scrollController = ScrollController();
+class _ProfileImageState extends State<ProfileImage> {
+  List<File>? _image = [];
+  late cloud_store.CollectionReference imgref;
+  bool _uploading = false;
+  String _uploadStatus = "";
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-
-    _alignmentAnimation = Tween<Alignment>(
-      begin: Alignment.center,
-      end: Alignment.topCenter,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-  }
+  final TextEditingController productName = TextEditingController();
+  final TextEditingController productPrice = TextEditingController();
+  final TextEditingController productDescription = TextEditingController();
+  final TextEditingController productStock = TextEditingController();
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    _animationController.dispose();
+    productName.dispose();
+    productPrice.dispose();
+    productDescription.dispose();
+    productStock.dispose();
     super.dispose();
-  }
-
-  void _toggleExpansion() {
-    setState(() {
-      _isExpanded = !_isExpanded;
-      if (_isExpanded) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("chatBot"),
+        title: const Text("Add Photos"),
         leading: IconButton(
-          onPressed: () async {
+          onPressed: () {
             Navigator.pushNamed(context, "/");
           },
-          icon: const Icon(Icons.arrow_back_ios),
+          icon: const Icon(Icons.arrow_back_ios_new),
         ),
+        actions: [
+          ElevatedButton(
+            onPressed: _uploading ? null : _uploadImage,
+            child: _uploading
+                ? const CircularProgressIndicator()
+                : const Icon(Icons.arrow_upward),
+          ),
+        ],
       ),
       body: Column(
-        children: <Widget>[
+        children: [
           Expanded(
-            child: AnimatedList(
-              reverse: true,
-              key: _listkey,
-              initialItemCount: _data.length,
-              itemBuilder: (BuildContext context, int index, animation) {
-                return buildItem(_data[index], animation, index);
-              },
-              controller: _scrollController,
-            ),
-          ),
-          const SizedBox(
-            height: 18,
-          ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              color: const Color(0xffe4ebfb),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 20, right: 20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: TextField(
-                        style: const TextStyle(color: Colors.black),
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide:
-                                  const BorderSide(color: Colors.redAccent)),
-                          hintText: "Hellow chapBot....",
-                          filled: true,
-                          hintStyle: const TextStyle(fontFamily: "italic"),
-                          fillColor: Colors.yellow,
+              child: GridView.builder(
+                  itemCount: _image!.length + 1,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3),
+                  itemBuilder: (context, index) {
+                    if (index >= 0 && index < _image!.length) {
+                      return Container(
+                        margin: const EdgeInsets.all(4.0),
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            image: FileImage(_image![index]),
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                        controller: queryController,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (msg) {
-                          getResponse();
+                      );
+                    } else {
+                      return GestureDetector(
+                        onTap: () async {
+                          final pickedImages =
+                              await imageHelper1.pickImage(multiple: true);
+                          if (pickedImages.isNotEmpty) {
+                            final xfiles =
+                                pickedImages.map((e) => XFile(e.path)).toList();
+                            for (int i = 0; i < xfiles.length; i++) {
+                              final croppedFile =
+                                  await imageHelper1.crop(file: xfiles[i]);
+                              if (croppedFile != null) {
+                                setState(() {
+                                  _image!.add(File(croppedFile.path));
+                                });
+                              }
+                            }
+                          }
                         },
-                      ),
-                    ),
-                    const SizedBox(
-                      width: 10,
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        getResponse();
-                      },
-                      icon: const Icon(
-                        Icons.send,
-                        color: Colors.amber,
-                      ),
-                    )
-                  ],
-                ),
-              ),
-            ),
-          )
+                        child: Container(
+                          margin: const EdgeInsets.all(4.0),
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(Icons.add),
+                          ),
+                        ),
+                      );
+                    }
+                  })),
+          TextButton(
+            onPressed: () async {
+              final pickedImages = await imageHelper1.pickImage(multiple: true);
+              if (pickedImages.isNotEmpty) {
+                final xfiles = pickedImages.map((e) => XFile(e.path)).toList();
+                final croppedFile = await imageHelper1.crop(file: xfiles[0]);
+                if (croppedFile != null) {
+                  setState(() {
+                    _image!.add(File(croppedFile.path));
+                  });
+                }
+                for (int i = 1; i < xfiles.length; i++) {
+                  final croppedFile = await imageHelper1.crop(file: xfiles[i]);
+                  if (croppedFile != null) {
+                    setState(() {
+                      _image!.add(File(croppedFile.path));
+                    });
+                  }
+                }
+              }
+            },
+            child: const Text('Pick images'),
+          ),
         ],
       ),
     );
   }
 
-  getResponse() async {
-    if (queryController.text.isNotEmpty) {
-      insertSingleItem(queryController.text);
+  Future<List<String>> uploadFiles(List<File> files) async {
+    List<String> downloadUrls = [];
+    final storageRef = FirebaseStorage.instance.ref();
 
-      var client = getClient();
+    final uploadTasks = files.map((file) {
+      final fileName = DateTime.now().microsecondsSinceEpoch.toString();
+      final fileRef = storageRef.child('images/$fileName');
+      return fileRef.putFile(file);
+    }).toList();
+    final snapShots = await Future.wait(uploadTasks);
+    for (final snapshot in snapShots) {
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      downloadUrls.add(downloadUrl);
+      print(downloadUrl);
+    }
+    return downloadUrls;
+  }
+
+  Future<void> _uploadImage() async {
+    if (_image == null) return;
+    final user = Provider.of<Users>(context, listen: false);
+    print('uploading ');
+
+    setState(() {
+      _uploading = true;
+      _uploadStatus = "Uploading image...";
+    });
+    String? fileURL;
+    List<String>? downloadURL;
+    if (_image!.length == 1) {
+      final imageName = '${DateTime.now().millisecondsSinceEpoch}.png';
+      final firebaseStorageRef =
+          FirebaseStorage.instance.ref().child('images/$imageName');
+      final uploadTask = firebaseStorageRef.putFile(_image![0]);
+      final taskSnapshot = await uploadTask;
+      fileURL = await taskSnapshot.ref.getDownloadURL();
+    }
+    if (_image!.isNotEmpty) {
       try {
-        client.post(
-          Uri.parse(BOT_URL),
-          body: {"text": queryController.text},
-        ).then((response) async {
-          if (response.statusCode == 200 && response.body.isNotEmpty) {
-            Map<String, dynamic> data = json.decode(response.body);
-            print("data ${data.runtimeType}");
-
-            //await Future.delayed(const Duration(seconds: 8));
-
-            insertSingleItem(data);
-          }
+        downloadURL = await uploadFiles(_image!);
+        setState(() {
+          _uploadStatus = 'Images uploaded successfully';
         });
-      } finally {
-        client.close();
-        queryController.clear();
+      } catch (e) {
+        setState(() {
+          _uploadStatus = 'Failed to upload images: $e';
+        });
       }
     }
-  }
 
-  void insertSingleItem(dynamic message) {
-    print("messsssssse$message ${message.runtimeType}");
-    _data.insert(0, message);
-    _listkey.currentState?.insertItem(
-      0,
-      duration: const Duration(milliseconds: 500),
-    );
-    _scrollController.animateTo(0,
-        duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-  }
-
-  http.Client getClient() {
-    return http.Client();
-  }
-
-  List<Future> futures = [];
-  List<int> indexes = [];
-
-  Widget buildItem(dynamic item, Animation<double> animation, int index) {
-    bool mine = item.toString().endsWith("<bot>");
-
-    if (item.toString().startsWith("{")) {
-      print("this block 1");
-      print(item);
-      Map<String, dynamic> details = item;
-      print("items after jsonDecode $details");
-
-      if (details.containsKey("response")) {
-        // Handle the case where the response is a chat message
-        String responseMessage = details["response"];
-        futures.add(getClient().post(
-          Uri.parse(BOT_URL),
-          body: {"text": responseMessage},
-        ));
-        indexes.add(index);
-        return SizeTransition(
-          sizeFactor: animation,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Container(
-              alignment: Alignment.topLeft,
-              child: Bubble(
-                color: const Color(0xfffbe4db),
-                padding: const BubbleEdges.all(10),
-                margin: const BubbleEdges.only(left: 10, right: 100),
-                nip: BubbleNip.rightBottom,
-                child: Text(
-                  responseMessage,
-                  style: TextStyle(color: mine ? Colors.blue : Colors.black),
-                  textAlign: TextAlign.justify,
+    // ignore: use_build_context_synchronously
+    showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text("Add product Details"),
+            content: Column(
+              children: [
+                TextFormField(
+                  controller: productName,
+                  decoration: const InputDecoration(labelText: "Product Name"),
                 ),
-              ),
-            ),
-          ),
-        );
-      } else {
-        String imageUrl = details["url_image"];
-        String name = details["name"];
-        String detailstext = details["details"];
-        String price = details["price"].toString();
-        bool isRow = true;
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              isRow = !isRow;
-            });
-          },
-          child: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Container(
-              alignment: Alignment.topLeft,
-              child: Card(
-                color: _isExpanded ? Colors.blue : Colors.white,
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+                TextFormField(
+                  controller: productPrice,
+                  decoration: const InputDecoration(labelText: "Product Price"),
                 ),
-                child: Align(
-                  alignment: _alignmentAnimation.value,
-                  child: SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.3,
-                    width: MediaQuery.of(context).size.width * 0.9,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(seconds: 1),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: Container(
-                          color: const Color(0xfffbe4db),
-                          child: Flex(
-                            direction: isRow ? Axis.horizontal : Axis.vertical,
-                            children: [
-                              Expanded(
-                                flex: _isExpanded ? 6 : 12,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: Image.network(
-                                    imageUrl,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                flex: _isExpanded ? 0 : 6,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: 2.0,
-                                        ),
-                                        const Row(
-                                          children: [
-                                            Icon(
-                                              Icons.star,
-                                              color: Colors.yellow,
-                                              size: 16,
-                                            ),
-                                            Icon(
-                                              Icons.star,
-                                              color: Colors.yellow,
-                                              size: 16,
-                                            ),
-                                            Icon(
-                                              Icons.star,
-                                              color: Colors.yellow,
-                                              size: 16,
-                                            ),
-                                            Icon(
-                                              Icons.star,
-                                              color: Colors.yellow,
-                                              size: 16,
-                                            ),
-                                            Icon(
-                                              Icons.star,
-                                              color: Colors.grey,
-                                              size: 16,
-                                            )
-                                          ],
-                                        ),
-                                        const SizedBox(
-                                          height: 8,
-                                        ),
-                                        Text(
-                                          "Tsh $price",
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.red),
-                                        ),
-                                        const SizedBox(
-                                          height: 8,
-                                        ),
-                                        const Row(
-                                          children: [
-                                            Icon(
-                                              Icons.location_on_outlined,
-                                              color: Colors.blue,
-                                            ),
-                                            Text(
-                                              "mbeya",
-                                              style: TextStyle(
-                                                  fontStyle: FontStyle.italic),
-                                            )
-                                          ],
-                                        ),
-                                        const SizedBox(
-                                          height: 8,
-                                        ),
-                                        Text(
-                                          detailstext,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                TextFormField(
+                  controller: productDescription,
+                  decoration:
+                      const InputDecoration(labelText: "Product Description"),
                 ),
-              ),
+              ],
             ),
-          ),
-        );
-      }
-    } else {
-      return SizeTransition(
-        sizeFactor: animation,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Container(
-            alignment: Alignment.topRight,
-            child: Bubble(
-              color: Color(0xffc1e8ff),
-              padding: const BubbleEdges.all(10),
-              margin: const BubbleEdges.only(left: 100, right: 10),
-              nip: BubbleNip.rightBottom,
-              child: Text(
-                item.replaceAll("<bot>", " "),
-                style: TextStyle(color: mine ? Colors.blue : Colors.black),
-                textAlign: TextAlign.justify,
+            actions: [
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  final name = productName.text;
+                  final price = int.parse(productPrice.text);
+                  final details = productDescription.text;
+                  final stock = int.parse(productStock.text);
+                  final List<String> imageUrls = [];
+                  if (fileURL != null) {
+                    imageUrls.add(fileURL);
+                    print('my images urls here $imageUrls');
+                  } else {
+                    print('my fileurl is null');
+                  }
+                  if (downloadURL != null) {
+                    imageUrls.addAll(downloadURL);
+                    print('my images urls here $imageUrls');
+                  } else {
+                    print('downloadurl is empty');
+                  }
+                  try {
+                    await DatabaseServices(uid: user.uid!).updateUserData(
+                      name,
+                      price,
+                      details,
+                      imageUrls,
+                      stock,
+                    );
+                    setState(() {
+                      _uploadStatus = 'Data updated successfully!';
+                    });
+                  } catch (e) {
+                    print('error here');
+                  }
+                },
+                child: const Text("upload"),
               ),
-            ),
-          ),
-        ),
-      );
-    }
+            ],
+          );
+        });
+
+    setState(() {
+      print('end');
+      _uploading = false;
+    });
   }
 }
