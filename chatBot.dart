@@ -62,12 +62,12 @@ class _ChatBotScreen extends State<ChatBotScreen> {
         child: Column(
           children: <Widget>[
             Expanded(
-              child: AnimatedList(
+              child: ListView.builder(
                   scrollDirection: Axis.vertical,
                   key: _listkey,
-                  initialItemCount: _data.length,
-                  itemBuilder: (BuildContext context, int index, animation) {
-                    return buildItem(_data[index], animation, index);
+                  itemCount: _data.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    return buildItem(_data[index], index);
                   },
                   controller: _scrollController),
             ),
@@ -179,7 +179,7 @@ class _ChatBotScreen extends State<ChatBotScreen> {
     return http.Client();
   }
 
-  Widget buildItem(dynamic item, Animation<double> animation, int index) {
+  Widget buildItem(dynamic item, int index) {
     bool mine = item.toString().endsWith("<bot>");
 
     if (item.toString().startsWith("{")) {
@@ -193,24 +193,20 @@ class _ChatBotScreen extends State<ChatBotScreen> {
         // Handle the case where the response is a chat message
         String responseMessage = details["response"];
 
-        return SizeTransition(
-          sizeFactor: animation,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Container(
-              alignment: Alignment.topLeft,
-              child: Bubble(
-                color: const Color(0xfff5f5f5),
-                padding: const BubbleEdges.only(
-                    left: 10, right: 10, bottom: 10, top: 10),
-                margin:
-                    const BubbleEdges.only(left: 10, right: 100, bottom: 10),
-                child: Text(
-                  responseMessage,
-                  style: TextStyle(
-                      color: mine ? Colors.blue : Colors.black, fontSize: 18),
-                  textAlign: TextAlign.left,
-                ),
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Container(
+            alignment: Alignment.topLeft,
+            child: Bubble(
+              color: const Color(0xfff5f5f5),
+              padding: const BubbleEdges.only(
+                  left: 10, right: 10, bottom: 10, top: 10),
+              margin: const BubbleEdges.only(left: 10, right: 100, bottom: 10),
+              child: Text(
+                responseMessage,
+                style: TextStyle(
+                    color: mine ? Colors.blue : Colors.black, fontSize: 18),
+                textAlign: TextAlign.left,
               ),
             ),
           ),
@@ -397,26 +393,23 @@ class _ChatBotScreen extends State<ChatBotScreen> {
         );
       }
     } else {
-      return SizeTransition(
-        sizeFactor: animation,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Container(
-            alignment: Alignment.topRight,
-            child: Bubble(
-              color: const Color(0xffff5722),
-              padding: const BubbleEdges.only(
-                  left: 10, right: 10, bottom: 10, top: 10),
-              margin: const BubbleEdges.only(left: 100, right: 10, bottom: 8),
-              child: Text(
-                item.replaceAll("<bot>", " "),
-                style: TextStyle(
-                    color: mine ? Colors.blue : Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Lato'),
-                textAlign: TextAlign.left,
-              ),
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Container(
+          alignment: Alignment.topRight,
+          child: Bubble(
+            color: const Color(0xffff5722),
+            padding: const BubbleEdges.only(
+                left: 10, right: 10, bottom: 10, top: 10),
+            margin: const BubbleEdges.only(left: 100, right: 10, bottom: 8),
+            child: Text(
+              item.replaceAll("<bot>", " "),
+              style: TextStyle(
+                  color: mine ? Colors.blue : Colors.black,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: 'Lato'),
+              textAlign: TextAlign.left,
             ),
           ),
         ),
